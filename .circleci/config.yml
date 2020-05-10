@@ -1,5 +1,5 @@
 # Java Maven CircleCI 2.0 configuration file
-#
+
 # Check https://circleci.com/docs/2.0/language-java/ for more details
 #
 version: 2
@@ -7,7 +7,7 @@ jobs:
   build:
     docker:
       # specify the version you desire here
-      - image: circleci/openjdk:11-browsers-legacy
+      - image: springframeworkguru/circleci_build
 
       # Specify service dependencies here if necessary
       # CircleCI maintains a library of pre-built images
@@ -18,9 +18,12 @@ jobs:
 
     environment:
       # Customize the JVM maximum heap limit
-      MAVEN_OPTS: -Xmx3200m
+      JVM_OPTS: -Xmx3200m
+      TERM: dumb
 
     steps:
+      - setup_remote_docker
+
       - checkout
 
       # Download and cache dependencies
@@ -30,12 +33,34 @@ jobs:
             # fallback to using the latest cache if no exact match is found
             - v1-dependencies-
 
-      - run: ./gradlew dependency:go-offline
+      - run: gradle dependencies
 
       - save_cache:
           paths:
             - ~/.m2
-          key: v1-dependencies-{{ checksum "pom.xml" }}
+          key: v1-dependencies-{{ checksum "build.gradle" }}
 
-      # run tests!
-      - run: ./gradlew integration-test
+      # run tests and package
+      - run: ./gradlew clean test
+
+      - run:
+          name: Save test results
+          command: |
+            mkdir -p ~/junit/
+            find . -type f -regex ".*/build/test-results/.*xml" -exec cp {} ~/junit/ \;
+          when: always
+
+      - store_test_results:
+          path: ~/junit
+
+      - store_artifacts:
+          path: ~/junit
+
+      - run:
+          name: install yarn
+          command: sudo npm install -g yarn
+
+      - run:
+          name: Build Docker Image
+          command: ./gradlew bootRepackage -Pprod pushDockerLatest pushDockerVersionTag -x test
+
